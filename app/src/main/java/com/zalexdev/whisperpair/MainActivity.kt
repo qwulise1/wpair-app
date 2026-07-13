@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -74,7 +75,7 @@ class MainActivity : ComponentActivity() {
     private val devices = mutableStateListOf<FastPairDevice>()
     private val exploitResults = mutableStateMapOf<String, String>()
     private val audioStates = mutableStateMapOf<String, AudioConnectionState>()
-    private val pairedDevices = mutableStateListOf<String>()  // Track successfully paired devices
+    private val pairedDevices = mutableStateListOf<String>()
     private var hasShownFirstFailWarning = false
     private val showUnpairWarning = mutableStateOf(false)
     private val showHfpErrorDialog = mutableStateOf(false)
@@ -92,7 +93,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Load saved paired devices
         loadPairedDevices()
 
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -172,7 +172,6 @@ class MainActivity : ComponentActivity() {
                     if (newIndex != -1) {
                         devices[newIndex] = devices[newIndex].copy(status = status)
 
-                        // Show first-fail warning if device is patched/error and we haven't shown it yet
                         if (!hasShownFirstFailWarning && (status == DeviceStatus.PATCHED || status == DeviceStatus.ERROR)) {
                             hasShownFirstFailWarning = true
                             showUnpairWarning.value = true
@@ -191,7 +190,7 @@ class MainActivity : ComponentActivity() {
             if (pairedDevices.contains(address)) {
                 audioStates[address] = AudioConnectionState(
                     isConnected = true,
-                    message = "HFP connected"
+                    message = getString(R.string.hfp_connected)
                 )
             }
         }
@@ -217,7 +216,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun exploitDevice(device: FastPairDevice) {
-        exploitResults[device.address] = "Initializing..."
+        exploitResults[device.address] = getString(R.string.initializing)
 
         exploit?.exploit(
             targetAddress = device.address,
@@ -230,18 +229,18 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread {
                     when (result) {
                         is FastPairExploit.ExploitResult.Success -> {
-                            exploitResults[device.address] = "PAIRED! BR/EDR: ${result.brEdrAddress}"
+                            exploitResults[device.address] = getString(R.string.paired_br, result.brEdrAddress)
                             addPairedDevice(device.address)
                         }
                         is FastPairExploit.ExploitResult.PartialSuccess -> {
-                            exploitResults[device.address] = "PARTIAL: ${result.brEdrAddress} - ${result.message}"
+                            exploitResults[device.address] = getString(R.string.partial_result, result.brEdrAddress, result.message)
                             addPairedDevice(device.address)
                         }
                         is FastPairExploit.ExploitResult.Failed -> {
-                            exploitResults[device.address] = "FAILED: ${result.reason}"
+                            exploitResults[device.address] = getString(R.string.failed_result, result.reason)
                         }
                         is FastPairExploit.ExploitResult.AccountKeyResult -> {
-                            exploitResults[device.address] = if (result.success) "KEY: ${result.message}" else "FAILED: ${result.message}"
+                            exploitResults[device.address] = if (result.success) getString(R.string.key_result, result.message) else getString(R.string.failed_result, result.message)
                         }
                         else -> {}
                     }
@@ -251,36 +250,36 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun writeAccountKey(device: FastPairDevice) {
-        exploitResults[device.address] = "Writing account key..."
+        exploitResults[device.address] = getString(R.string.writing_key)
 
         exploit?.writeAccountKeyDirect(device.address) { result ->
             runOnUiThread {
                 when (result) {
                     is FastPairExploit.ExploitResult.AccountKeyResult -> {
                         exploitResults[device.address] = if (result.success)
-                            "KEY WRITTEN! Device registered."
+                            getString(R.string.key_written)
                         else
-                            "KEY FAILED: ${result.message}"
+                            getString(R.string.key_failed, result.message)
                     }
-                    else -> exploitResults[device.address] = "Unexpected result"
+                    else -> exploitResults[device.address] = getString(R.string.unexpected)
                 }
             }
         }
     }
 
     private fun floodAccountKeys(device: FastPairDevice) {
-        exploitResults[device.address] = "Flooding: 0/10..."
+        exploitResults[device.address] = getString(R.string.flooding_start)
 
         exploit?.floodAccountKeys(device.address, 10) { current, total, done ->
             runOnUiThread {
-                exploitResults[device.address] = if (done) "FLOOD: $current/$total done" else "Flooding: $current/$total..."
+                exploitResults[device.address] = if (done) getString(R.string.flood_done, current, total) else getString(R.string.flooding_progress, current, total)
             }
         }
     }
 
     private fun connectHfp(device: FastPairDevice) {
         val am = audioManager ?: return
-        audioStates[device.address] = AudioConnectionState(message = "Connecting HFP...")
+        audioStates[device.address] = AudioConnectionState(message = getString(R.string.connecting_hfp))
 
         am.connectAudioProfile(device.address) { state ->
             runOnUiThread {
@@ -288,14 +287,14 @@ class MainActivity : ComponentActivity() {
                     is BluetoothAudioManager.AudioState.Connected -> {
                         audioStates[device.address] = AudioConnectionState(
                             isConnected = true,
-                            message = "HFP connected - ready for audio"
+                            message = getString(R.string.hfp_connected_ready)
                         )
                     }
                     is BluetoothAudioManager.AudioState.Error -> {
                         val userMessage = when (state.message) {
-                            "HFP_PERMISSION_DENIED" -> "Manual connection required"
-                            "HFP_MANUAL_REQUIRED" -> "Manual connection required"
-                            "HFP_TIMEOUT" -> "Connection timed out"
+                            "HFP_PERMISSION_DENIED" -> getString(R.string.manual_required)
+                            "HFP_MANUAL_REQUIRED" -> getString(R.string.manual_required)
+                            "HFP_TIMEOUT" -> getString(R.string.connection_timeout)
                             else -> state.message
                         }
                         audioStates[device.address] = AudioConnectionState(
@@ -315,8 +314,8 @@ class MainActivity : ComponentActivity() {
         val outputDir = getExternalFilesDir(null) ?: filesDir
 
         audioStates[device.address] = audioStates[device.address]?.copy(
-            isRecording = true, message = "Recording..."
-        ) ?: AudioConnectionState(isRecording = true, message = "Recording...")
+            isRecording = true, message = getString(R.string.recording)
+        ) ?: AudioConnectionState(isRecording = true, message = getString(R.string.recording))
 
         am.startRecording(
             outputDir = outputDir,
@@ -325,12 +324,12 @@ class MainActivity : ComponentActivity() {
                     when (state) {
                         is BluetoothAudioManager.AudioState.Recording -> {
                             audioStates[device.address] = audioStates[device.address]?.copy(
-                                isRecording = true, message = "Recording microphone..."
+                                isRecording = true, message = getString(R.string.recording_mic)
                             ) ?: AudioConnectionState(isRecording = true)
                         }
                         is BluetoothAudioManager.AudioState.Error -> {
                             audioStates[device.address] = audioStates[device.address]?.copy(
-                                isRecording = false, message = "Error: ${state.message}"
+                                isRecording = false, message = getString(R.string.error_prefix, state.message)
                             ) ?: AudioConnectionState(message = state.message)
                         }
                         else -> {}
@@ -343,7 +342,7 @@ class MainActivity : ComponentActivity() {
                     audioStates[device.address] = audioStates[device.address]?.copy(
                         isRecording = false,
                         recordingFile = info.file.absolutePath,
-                        message = "Saved: ${info.file.name} (${duration}s)"
+                        message = getString(R.string.saved_file, info.file.name, duration)
                     ) ?: AudioConnectionState(recordingFile = info.file.absolutePath)
                 }
             }
@@ -358,25 +357,25 @@ class MainActivity : ComponentActivity() {
         val am = audioManager ?: return
 
         audioStates[device.address] = audioStates[device.address]?.copy(
-            isListening = true, message = "Starting live audio..."
-        ) ?: AudioConnectionState(isListening = true, message = "Starting...")
+            isListening = true, message = getString(R.string.starting_live)
+        ) ?: AudioConnectionState(isListening = true, message = getString(R.string.starting))
 
         am.startListening { state ->
             runOnUiThread {
                 when (state) {
                     is BluetoothAudioManager.AudioState.Listening -> {
                         audioStates[device.address] = audioStates[device.address]?.copy(
-                            isListening = true, message = "LIVE - Listening to microphone"
+                            isListening = true, message = getString(R.string.live_listening)
                         ) ?: AudioConnectionState(isListening = true)
                     }
                     is BluetoothAudioManager.AudioState.Error -> {
                         audioStates[device.address] = audioStates[device.address]?.copy(
-                            isListening = false, message = "Error: ${state.message}"
+                            isListening = false, message = getString(R.string.error_prefix, state.message)
                         ) ?: AudioConnectionState(message = state.message)
                     }
                     is BluetoothAudioManager.AudioState.Connected -> {
                         audioStates[device.address] = audioStates[device.address]?.copy(
-                            isListening = false, message = "Stopped listening"
+                            isListening = false, message = getString(R.string.stopped_listening)
                         ) ?: AudioConnectionState(isConnected = true)
                     }
                     else -> {}
@@ -388,7 +387,7 @@ class MainActivity : ComponentActivity() {
     private fun stopListening(device: FastPairDevice) {
         audioManager?.stopListening()
         audioStates[device.address] = audioStates[device.address]?.copy(
-            isListening = false, message = "Stopped"
+            isListening = false, message = getString(R.string.stopped)
         ) ?: AudioConnectionState()
     }
 
@@ -436,9 +435,8 @@ fun WhisperPairApp(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showDisclaimerDialog by remember { mutableStateOf(!prefs.getBoolean(KEY_DISCLAIMER_ACCEPTED, false)) }
 
-    // Scanner state - lifted up to persist across tab switches
     var isScanning by remember { mutableStateOf(false) }
-    var showAllDevices by remember { mutableStateOf(false) }  // Default to Fast Pair only
+    var showAllDevices by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
@@ -447,7 +445,7 @@ fun WhisperPairApp(
                     selected = currentScreen == Screen.Scanner,
                     onClick = { currentScreen = Screen.Scanner },
                     icon = { Icon(Icons.Default.BluetoothSearching, contentDescription = null) },
-                    label = { Text("Scanner") },
+                    label = { Text(stringResource(R.string.nav_scanner)) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = CyanPrimary,
                         selectedTextColor = CyanPrimary,
@@ -466,7 +464,7 @@ fun WhisperPairApp(
                             Icon(Icons.Default.Headphones, contentDescription = null)
                         }
                     },
-                    label = { Text("Paired") },
+                    label = { Text(stringResource(R.string.nav_paired)) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = CyanPrimary,
                         selectedTextColor = CyanPrimary,
@@ -477,7 +475,7 @@ fun WhisperPairApp(
                     selected = currentScreen == Screen.Recordings,
                     onClick = { currentScreen = Screen.Recordings },
                     icon = { Icon(Icons.Default.Audiotrack, contentDescription = null) },
-                    label = { Text("Recordings") },
+                    label = { Text(stringResource(R.string.nav_recordings)) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = CyanPrimary,
                         selectedTextColor = CyanPrimary,
@@ -550,19 +548,19 @@ fun HfpErrorDialog(context: Context, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.HeadsetOff, null, tint = WarningOrange, modifier = Modifier.size(48.dp)) },
-        title = { Text("Manual Connection Required", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.manual_connection), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("Android restricts direct audio profile connections for non-system apps. You need to connect manually through settings.", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.manual_connection_desc), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
-                Text("Steps:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
+                Text(stringResource(R.string.steps), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
                 Spacer(Modifier.height(8.dp))
-                Text("1. Open Bluetooth settings", style = MaterialTheme.typography.bodySmall)
-                Text("2. Find the paired device in the list", style = MaterialTheme.typography.bodySmall)
-                Text("3. Tap on it to connect the audio profile", style = MaterialTheme.typography.bodySmall)
-                Text("4. Return here - audio controls will be available", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.step1), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.step2), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.step3), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.step4), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(12.dp))
-                Text("The device is already paired via exploit. Once you manually connect audio in settings, the app can access the microphone.", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Text(stringResource(R.string.manual_connection_note), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
             }
         },
         confirmButton = {
@@ -575,10 +573,10 @@ fun HfpErrorDialog(context: Context, onDismiss: () -> Unit) {
             ) {
                 Icon(Icons.Default.Bluetooth, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Open Bluetooth Settings")
+                Text(stringResource(R.string.open_bluetooth))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Later", color = TextSecondary) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.later), color = TextSecondary) } },
         containerColor = DarkSurface
     )
 }
@@ -588,25 +586,25 @@ fun UnpairWarningDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.BluetoothDisabled, null, tint = WarningOrange, modifier = Modifier.size(48.dp)) },
-        title = { Text("Device May Be Already Paired", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.device_may_paired), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("The test failed. This could mean:", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.test_failed_reasons), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
-                BulletPoint("The device is already paired in your phone's Bluetooth settings")
-                BulletPoint("The device firmware is patched")
-                BulletPoint("The device doesn't support Fast Pair")
+                BulletPoint(stringResource(R.string.reason_paired))
+                BulletPoint(stringResource(R.string.reason_patched))
+                BulletPoint(stringResource(R.string.reason_unsupported))
                 Spacer(Modifier.height(16.dp))
-                Text("To test properly:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
+                Text(stringResource(R.string.to_test_properly), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
                 Spacer(Modifier.height(8.dp))
-                Text("1. Go to Settings → Bluetooth", style = MaterialTheme.typography.bodySmall)
-                Text("2. Find the device and tap 'Forget' or 'Unpair'", style = MaterialTheme.typography.bodySmall)
-                Text("3. Return here and test again", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.unpair_step1), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.unpair_step2), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.unpair_step3), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(12.dp))
-                Text("Android remembers paired devices and won't allow new pairing attempts.", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Text(stringResource(R.string.android_remembers), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
             }
         },
-        confirmButton = { Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text("Got It") } },
+        confirmButton = { Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text(stringResource(R.string.got_it)) } },
         containerColor = DarkSurface
     )
 }
@@ -662,7 +660,6 @@ fun ScannerScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp)) {
-        // Header
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -672,12 +669,12 @@ fun ScannerScreen(
                 Icon(Icons.Default.Security, contentDescription = null, tint = CyanPrimary, modifier = Modifier.size(28.dp))
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("WhisperPair", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextPrimary)
-                    Text("Developed by ZalexDev", fontSize = 11.sp, color = CyanPrimary)
+                    Text(stringResource(R.string.scanner_header), fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextPrimary)
+                    Text(stringResource(R.string.scanner_subheader), fontSize = 11.sp, color = CyanPrimary)
                 }
             }
             IconButton(onClick = onShowAbout) {
-                Icon(Icons.Outlined.Info, contentDescription = "About", tint = TextSecondary)
+                Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.about), tint = TextSecondary)
             }
         }
 
@@ -687,7 +684,6 @@ fun ScannerScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // Filter chips row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -696,7 +692,6 @@ fun ScannerScreen(
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // Fast Pair Only chip
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -713,13 +708,12 @@ fun ScannerScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Fast Pair",
+                    stringResource(R.string.chip_fast_pair),
                     fontSize = 13.sp,
                     fontWeight = if (!showAllDevices) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (!showAllDevices) DarkBackground else TextSecondary
                 )
             }
-            // All BLE Devices chip
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -736,7 +730,7 @@ fun ScannerScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "All BLE",
+                    stringResource(R.string.chip_all_ble),
                     fontSize = 13.sp,
                     fontWeight = if (showAllDevices) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (showAllDevices) DarkBackground else TextSecondary
@@ -747,10 +741,10 @@ fun ScannerScreen(
         Spacer(Modifier.height(12.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Discovered Devices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Text(stringResource(R.string.discovered_devices), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (devices.isNotEmpty()) {
-                    Text("${devices.size} found", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Text(stringResource(R.string.devices_found, devices.size), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = onClearDevices, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Clear, null, Modifier.size(16.dp), tint = TextSecondary)
@@ -782,17 +776,17 @@ fun ScannerScreen(
         AlertDialog(
             onDismissRequest = { showPermissionDeniedDialog = false },
             icon = { Icon(Icons.Default.PermDeviceInformation, null, tint = WarningOrange, modifier = Modifier.size(48.dp)) },
-            title = { Text("Permissions Required", fontWeight = FontWeight.Bold) },
-            text = { Text("WhisperPair needs Bluetooth and Microphone permissions to function.") },
+            title = { Text(stringResource(R.string.permissions_required), fontWeight = FontWeight.Bold) },
+            text = { Text(stringResource(R.string.permissions_desc)) },
             confirmButton = {
                 Button(onClick = {
                     showPermissionDeniedDialog = false
                     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                         data = Uri.fromParts("package", context.packageName, null)
                     })
-                }, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text("Open Settings") }
+                }, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text(stringResource(R.string.open_settings)) }
             },
-            dismissButton = { TextButton(onClick = { showPermissionDeniedDialog = false }) { Text("Cancel", color = TextSecondary) } },
+            dismissButton = { TextButton(onClick = { showPermissionDeniedDialog = false }) { Text(stringResource(R.string.cancel), color = TextSecondary) } },
             containerColor = DarkSurface
         )
     }
@@ -801,15 +795,15 @@ fun ScannerScreen(
         AlertDialog(
             onDismissRequest = { showBluetoothDisabledDialog = false },
             icon = { Icon(Icons.Default.BluetoothDisabled, null, tint = WarningOrange, modifier = Modifier.size(48.dp)) },
-            title = { Text("Bluetooth Disabled", fontWeight = FontWeight.Bold) },
-            text = { Text("Please enable Bluetooth to scan for devices.") },
+            title = { Text(stringResource(R.string.bluetooth_disabled), fontWeight = FontWeight.Bold) },
+            text = { Text(stringResource(R.string.bluetooth_disabled_desc)) },
             confirmButton = {
                 Button(onClick = {
                     showBluetoothDisabledDialog = false
                     bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                }, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text("Enable") }
+                }, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text(stringResource(R.string.enable)) }
             },
-            dismissButton = { TextButton(onClick = { showBluetoothDisabledDialog = false }) { Text("Cancel", color = TextSecondary) } },
+            dismissButton = { TextButton(onClick = { showBluetoothDisabledDialog = false }) { Text(stringResource(R.string.cancel), color = TextSecondary) } },
             containerColor = DarkSurface
         )
     }
@@ -831,7 +825,6 @@ fun PairedDevicesScreen(
     onFloodKeys: (FastPairDevice) -> Unit,
     onCheckConnections: () -> Unit
 ) {
-    // Check for existing HFP connections when screen is shown
     LaunchedEffect(Unit) {
         onCheckConnections()
     }
@@ -851,8 +844,8 @@ fun PairedDevicesScreen(
             Icon(Icons.Default.Headphones, null, tint = CyanPrimary, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("Paired Devices", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextPrimary)
-                Text("Manage exploited devices", fontSize = 12.sp, color = TextSecondary)
+                Text(stringResource(R.string.paired_devices), fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextPrimary)
+                Text(stringResource(R.string.manage_exploited), fontSize = 12.sp, color = TextSecondary)
             }
         }
 
@@ -880,21 +873,21 @@ fun PairedDevicesScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            "No Paired Devices",
+                            stringResource(R.string.no_paired),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = TextPrimary
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Devices you successfully pair using the Magic exploit will appear here.",
+                            stringResource(R.string.no_paired_desc),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary,
                             textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            "Go to Scanner tab → Find a vulnerable device → Tap Magic",
+                            stringResource(R.string.no_paired_hint),
                             style = MaterialTheme.typography.labelMedium,
                             color = CyanPrimary,
                             textAlign = TextAlign.Center
@@ -952,7 +945,6 @@ fun PairedDeviceCard(
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Device header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -999,7 +991,7 @@ fun PairedDeviceCard(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        if (isHfpConnected) "Connected" else "Disconnected",
+                        if (isHfpConnected) stringResource(R.string.connected) else stringResource(R.string.disconnected),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
@@ -1010,7 +1002,6 @@ fun PairedDeviceCard(
 
             Spacer(Modifier.height(16.dp))
 
-            // Status message
             audioState?.message?.let { message ->
                 Row(
                     modifier = Modifier
@@ -1047,14 +1038,12 @@ fun PairedDeviceCard(
             }
 
             if (isHfpConnected) {
-                // Audio Controls
-                Text("Audio Controls", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                Text(stringResource(R.string.audio_controls), style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Live Listen Button
                     Button(
                         onClick = { if (isListening) onStopListening() else onStartListening() },
                         colors = ButtonDefaults.buttonColors(
@@ -1069,10 +1058,9 @@ fun PairedDeviceCard(
                             Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(if (isListening) "Stop Live" else "Live Listen")
+                        Text(if (isListening) stringResource(R.string.stop_live) else stringResource(R.string.live_listen))
                     }
 
-                    // Record Button
                     Button(
                         onClick = { if (isRecording) onStopRecording() else onStartRecording() },
                         colors = ButtonDefaults.buttonColors(
@@ -1089,7 +1077,7 @@ fun PairedDeviceCard(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (isRecording) "Stop Rec" else "Record",
+                            if (isRecording) stringResource(R.string.stop_rec) else stringResource(R.string.record),
                             color = if (isRecording) Color.White else TextPrimary
                         )
                     }
@@ -1097,11 +1085,9 @@ fun PairedDeviceCard(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Account Key Controls
-                Text("Account Key Operations", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                Text(stringResource(R.string.account_key_ops), style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                 Spacer(Modifier.height(8.dp))
 
-                // Key operation result/progress display
                 exploitResult?.let { result ->
                     val bgColor = when {
                         result.startsWith("KEY") || result.startsWith("FLOOD") -> PatchedGreen
@@ -1150,7 +1136,7 @@ fun PairedDeviceCard(
                     ) {
                         Icon(Icons.Default.Key, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Write Key", fontSize = 12.sp)
+                        Text(stringResource(R.string.write_key), fontSize = 12.sp)
                     }
                     OutlinedButton(
                         onClick = onFloodKeys,
@@ -1160,11 +1146,10 @@ fun PairedDeviceCard(
                     ) {
                         Icon(Icons.Default.FlashOn, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Flood Keys", fontSize = 12.sp)
+                        Text(stringResource(R.string.flood_keys), fontSize = 12.sp)
                     }
                 }
             } else {
-                // Not connected - show connect buttons only
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1177,7 +1162,7 @@ fun PairedDeviceCard(
                     ) {
                         Icon(Icons.Default.BluetoothConnected, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Connect Audio")
+                        Text(stringResource(R.string.connect_audio))
                     }
                     OutlinedButton(
                         onClick = {
@@ -1189,7 +1174,7 @@ fun PairedDeviceCard(
                     ) {
                         Icon(Icons.Default.Settings, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Settings")
+                        Text(stringResource(R.string.settings))
                     }
                 }
             }
@@ -1232,7 +1217,6 @@ fun RecordingsScreen(recordingsDir: File, paddingValues: PaddingValues) {
         playingFile = file.absolutePath
 
         if (file.name.endsWith(".m4a")) {
-            // Use MediaPlayer for M4A files
             try {
                 val player = MediaPlayer().apply {
                     setDataSource(file.absolutePath)
@@ -1255,7 +1239,6 @@ fun RecordingsScreen(recordingsDir: File, paddingValues: PaddingValues) {
                 playingFile = null
             }
         } else {
-            // Use AudioTrack for raw PCM files
             thread {
                 try {
                     val bufferSize = AudioTrack.getMinBufferSize(16000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -1292,7 +1275,7 @@ fun RecordingsScreen(recordingsDir: File, paddingValues: PaddingValues) {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Share recording"))
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_recording)))
     }
 
     fun deleteFile(file: File) {
@@ -1305,10 +1288,10 @@ fun RecordingsScreen(recordingsDir: File, paddingValues: PaddingValues) {
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Audiotrack, null, tint = CyanPrimary, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(12.dp))
-            Text("Recordings", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextPrimary)
+            Text(stringResource(R.string.nav_recordings), fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextPrimary)
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { refreshRecordings() }) {
-                Icon(Icons.Default.Refresh, "Refresh", tint = TextSecondary)
+                Icon(Icons.Default.Refresh, stringResource(R.string.refresh), tint = TextSecondary)
             }
         }
 
@@ -1317,8 +1300,8 @@ fun RecordingsScreen(recordingsDir: File, paddingValues: PaddingValues) {
                 Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.AudioFile, null, tint = TextSecondary, modifier = Modifier.size(64.dp))
                     Spacer(Modifier.height(16.dp))
-                    Text("No recordings yet", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-                    Text("Use the Scanner tab to record audio from exploited devices", style = MaterialTheme.typography.bodySmall, color = TextSecondary, textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.no_recordings), style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                    Text(stringResource(R.string.no_recordings_desc), style = MaterialTheme.typography.bodySmall, color = TextSecondary, textAlign = TextAlign.Center)
                 }
             }
         } else {
@@ -1374,14 +1357,14 @@ fun ScanControlCard(isScanning: Boolean, deviceCount: Int, onToggleScan: () -> U
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(if (isScanning) "Scanning..." else "Ready to Scan", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1)
-                    Text(if (isScanning) "Looking for Fast Pair devices" else "Tap to discover nearby devices", style = MaterialTheme.typography.bodySmall, color = TextSecondary, maxLines = 1)
+                    Text(if (isScanning) stringResource(R.string.scanning) else stringResource(R.string.ready_to_scan), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1)
+                    Text(if (isScanning) stringResource(R.string.looking_fast_pair) else stringResource(R.string.tap_discover), style = MaterialTheme.typography.bodySmall, color = TextSecondary, maxLines = 1)
                 }
             }
             Button(onClick = onToggleScan, colors = ButtonDefaults.buttonColors(containerColor = if (isScanning) VulnerableRed else CyanPrimary), shape = RoundedCornerShape(12.dp), modifier = if (isScanning) Modifier.scale(pulse) else Modifier) {
                 Icon(if (isScanning) Icons.Default.Stop else Icons.Default.PlayArrow, null, Modifier.size(20.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (isScanning) "Stop" else "Scan")
+                Text(if (isScanning) stringResource(R.string.stop) else stringResource(R.string.scan))
             }
         }
     }
@@ -1433,9 +1416,9 @@ fun DeviceCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoChip(when (device.signalStrength) { SignalStrength.EXCELLENT, SignalStrength.GOOD -> Icons.Default.NetworkWifi; SignalStrength.FAIR -> Icons.Default.Wifi; else -> Icons.Default.WifiOff }, "${device.rssi} dBm", when (device.signalStrength) { SignalStrength.EXCELLENT, SignalStrength.GOOD -> SignalStrong; SignalStrength.FAIR -> SignalMedium; else -> SignalWeak })
                     if (device.isFastPair) {
-                        InfoChip(if (device.isPairingMode) Icons.Default.Link else Icons.Default.LinkOff, if (device.isPairingMode) "Pairing" else "Idle", if (device.isPairingMode) TestingBlue else TextSecondary)
+                        InfoChip(if (device.isPairingMode) Icons.Default.Link else Icons.Default.LinkOff, if (device.isPairingMode) stringResource(R.string.pairing) else stringResource(R.string.idle), if (device.isPairingMode) TestingBlue else TextSecondary)
                     } else {
-                        InfoChip(Icons.Default.Bluetooth, "BLE", TextSecondary)
+                        InfoChip(Icons.Default.Bluetooth, stringResource(R.string.ble), TextSecondary)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1451,14 +1434,14 @@ fun DeviceCard(
                         FilledTonalButton(onClick = onTest, colors = ButtonDefaults.filledTonalButtonColors(containerColor = CyanPrimary.copy(alpha = 0.2f), contentColor = CyanPrimary), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), modifier = Modifier.height(32.dp)) {
                         Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Test", fontSize = 12.sp)
+                        Text(stringResource(R.string.test), fontSize = 12.sp)
                     }
                     }
                     if (device.status == DeviceStatus.TESTING) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = TestingBlue)
                             Spacer(Modifier.width(8.dp))
-                            Text("Testing...", fontSize = 12.sp, color = TestingBlue)
+                            Text(stringResource(R.string.status_testing_dots), fontSize = 12.sp, color = TestingBlue)
                         }
                     }
                 }
@@ -1469,11 +1452,10 @@ fun DeviceCard(
                 Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(TestingBlue.copy(alpha = 0.1f)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Info, null, tint = TestingBlue, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Device in pairing mode - test not applicable", style = MaterialTheme.typography.labelSmall, color = TestingBlue)
+                    Text(stringResource(R.string.pair_mode_info), style = MaterialTheme.typography.labelSmall, color = TestingBlue)
                 }
             }
 
-            // Exploit progress display (shown for all devices during/after quick exploit)
             exploitResult?.let { result ->
                 Spacer(Modifier.height(8.dp))
                 val bgColor = when { result.startsWith("PAIRED") || result.startsWith("KEY") -> PatchedGreen; result.startsWith("PARTIAL") -> WarningOrange; result.startsWith("FAILED") -> VulnerableRed; else -> CyanPrimary }
@@ -1484,17 +1466,15 @@ fun DeviceCard(
                 }
             }
 
-            // Vulnerable device controls
             if (device.status == DeviceStatus.VULNERABLE) {
                 Spacer(Modifier.height(12.dp))
 
                 val isOperating = exploitResult?.let { it.startsWith("Connecting") || it.startsWith("Writing") || it.startsWith("Flooding") } == true
 
-                // Magic button
                 Button(onClick = { showMagicDialog = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = VulnerableRed), enabled = !isOperating) {
                     Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Magic - Pair Device", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.magic_pair), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1504,23 +1484,23 @@ fun DeviceCard(
         AlertDialog(
             onDismissRequest = { showMagicDialog = false },
             icon = { Icon(Icons.Default.Warning, null, tint = VulnerableRed, modifier = Modifier.size(48.dp)) },
-            title = { Text("Exploit Vulnerable Device?", fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.exploit_dialog_title), fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    Text("This will attempt to:")
+                    Text(stringResource(R.string.exploit_dialog_text))
                     Spacer(Modifier.height(8.dp))
-                    BulletPoint("Perform Fast Pair Key-Based Pairing")
-                    BulletPoint("Extract BR/EDR address")
-                    BulletPoint("Initiate Bluetooth Classic bonding")
-                    BulletPoint("Write Account Key for persistence")
+                    BulletPoint(stringResource(R.string.exploit_step1))
+                    BulletPoint(stringResource(R.string.exploit_step2))
+                    BulletPoint(stringResource(R.string.exploit_step3))
+                    BulletPoint(stringResource(R.string.exploit_step4))
                     Spacer(Modifier.height(12.dp))
-                    Text("After success, use 'Connect Audio' for microphone access.", style = MaterialTheme.typography.bodySmall, color = CyanPrimary)
+                    Text(stringResource(R.string.exploit_after), style = MaterialTheme.typography.bodySmall, color = CyanPrimary)
                     Spacer(Modifier.height(8.dp))
-                    Text("Only test devices you own!", style = MaterialTheme.typography.bodySmall, color = VulnerableRed, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.exploit_warning), style = MaterialTheme.typography.bodySmall, color = VulnerableRed, fontWeight = FontWeight.SemiBold)
                 }
             },
-            confirmButton = { Button(onClick = { showMagicDialog = false; onExploit() }, colors = ButtonDefaults.buttonColors(containerColor = VulnerableRed)) { Text("Execute") } },
-            dismissButton = { TextButton(onClick = { showMagicDialog = false }) { Text("Cancel", color = TextSecondary) } },
+            confirmButton = { Button(onClick = { showMagicDialog = false; onExploit() }, colors = ButtonDefaults.buttonColors(containerColor = VulnerableRed)) { Text(stringResource(R.string.execute)) } },
+            dismissButton = { TextButton(onClick = { showMagicDialog = false }) { Text(stringResource(R.string.cancel), color = TextSecondary) } },
             containerColor = DarkSurface
         )
     }
@@ -1540,11 +1520,11 @@ fun StatusBadge(status: DeviceStatus) {
     val infiniteTransition = rememberInfiniteTransition(label = "status")
     val alpha by infiniteTransition.animateFloat(0.7f, 1f, infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "alpha")
     val (text, color, icon) = when (status) {
-        DeviceStatus.NOT_TESTED -> Triple("Not Tested", TextSecondary, Icons.Outlined.HelpOutline)
-        DeviceStatus.TESTING -> Triple("Testing", TestingBlue, Icons.Default.Sync)
-        DeviceStatus.VULNERABLE -> Triple("VULNERABLE", VulnerableRed, Icons.Default.Warning)
-        DeviceStatus.PATCHED -> Triple("Patched", PatchedGreen, Icons.Default.CheckCircle)
-        DeviceStatus.ERROR -> Triple("Error", WarningOrange, Icons.Default.Error)
+        DeviceStatus.NOT_TESTED -> Triple(stringResource(R.string.status_not_tested), TextSecondary, Icons.Outlined.HelpOutline)
+        DeviceStatus.TESTING -> Triple(stringResource(R.string.status_testing), TestingBlue, Icons.Default.Sync)
+        DeviceStatus.VULNERABLE -> Triple(stringResource(R.string.status_vulnerable), VulnerableRed, Icons.Default.Warning)
+        DeviceStatus.PATCHED -> Triple(stringResource(R.string.status_patched), PatchedGreen, Icons.Default.CheckCircle)
+        DeviceStatus.ERROR -> Triple(stringResource(R.string.status_error), WarningOrange, Icons.Default.Error)
     }
     Surface(color = color.copy(alpha = if (status == DeviceStatus.VULNERABLE) alpha * 0.2f else 0.15f), shape = RoundedCornerShape(8.dp)) {
         Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1561,8 +1541,8 @@ fun EmptyStateCard(isScanning: Boolean) {
         Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(if (isScanning) Icons.Default.BluetoothSearching else Icons.Default.BluetoothDisabled, null, tint = TextSecondary, modifier = Modifier.size(64.dp))
             Spacer(Modifier.height(16.dp))
-            Text(if (isScanning) "Searching..." else "No devices", style = MaterialTheme.typography.titleMedium, color = TextPrimary, textAlign = TextAlign.Center)
-            Text(if (isScanning) "Looking for Fast Pair devices" else "Start scanning to discover devices", style = MaterialTheme.typography.bodySmall, color = TextSecondary, textAlign = TextAlign.Center)
+            Text(if (isScanning) stringResource(R.string.searching) else stringResource(R.string.no_devices), style = MaterialTheme.typography.titleMedium, color = TextPrimary, textAlign = TextAlign.Center)
+            Text(if (isScanning) stringResource(R.string.looking_fast_pair) else stringResource(R.string.tap_discover), style = MaterialTheme.typography.bodySmall, color = TextSecondary, textAlign = TextAlign.Center)
         }
     }
 }
@@ -1572,19 +1552,19 @@ fun DisclaimerDialog(onAccept: () -> Unit) {
     AlertDialog(
         onDismissRequest = { },
         icon = { Icon(Icons.Default.Security, null, tint = CyanPrimary, modifier = Modifier.size(48.dp)) },
-        title = { Text("Security Research Tool", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.security_tool_title), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("WhisperPair is a DEFENSIVE security tool for CVE-2025-36911 vulnerability testing.")
+                Text(stringResource(R.string.disclaimer_text))
                 Spacer(Modifier.height(12.dp))
-                BulletPoint("Only test devices you own or have permission to test")
-                BulletPoint("Helps identify devices needing firmware updates")
-                BulletPoint("For security research purposes only")
+                BulletPoint(stringResource(R.string.disclaimer_own))
+                BulletPoint(stringResource(R.string.disclaimer_updates))
+                BulletPoint(stringResource(R.string.disclaimer_research))
                 Spacer(Modifier.height(12.dp))
-                Text("By using this tool, you agree to use it responsibly.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                Text(stringResource(R.string.disclaimer_agree), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
         },
-        confirmButton = { Button(onClick = onAccept, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text("I Understand") } },
+        confirmButton = { Button(onClick = onAccept, colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary)) { Text(stringResource(R.string.i_understand)) } },
         containerColor = DarkSurface
     )
 }
@@ -1608,23 +1588,21 @@ fun AboutDialog(onDismiss: () -> Unit) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Image(
                     painter = painterResource(R.mipmap.ic_launcher_foreground),
-                    contentDescription = "WhisperPair",
+                    contentDescription = stringResource(R.string.app_name),
                     modifier = Modifier.size(72.dp)
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("WhisperPair v1.1", fontWeight = FontWeight.Bold)
-                Text("CVE-2025-36911 Vulnerability Scanner", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                Text(stringResource(R.string.about_version), fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.about_subtitle), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
         },
         text = {
             Column(modifier = Modifier.verticalScroll(scrollState)) {
-                // Developer
-                SectionHeader("Developer")
+                SectionHeader(stringResource(R.string.about_developer))
                 LinkRow("@ZalexDev", "https://github.com/zalexdev", uriHandler)
 
                 Spacer(Modifier.height(8.dp))
 
-                // Disclaimer
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1636,7 +1614,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     Icon(Icons.Default.Info, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "This is an independent implementation. The KU Leuven researchers discovered the vulnerability but have not released any code and are not affiliated with this project.",
+                        stringResource(R.string.about_disclaimer),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary
                     )
@@ -1644,21 +1622,18 @@ fun AboutDialog(onDismiss: () -> Unit) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // Links
-                SectionHeader("Links")
-                LinkRow("Latest Release", "https://github.com/zalexdev/whisper-pair-app", uriHandler)
-                LinkRow("WhisperPair Website", "https://whisperpair.eu", uriHandler)
-                LinkRow("CVE Entry", "https://www.cve.org/CVERecord?id=CVE-2025-36911", uriHandler)
+                SectionHeader(stringResource(R.string.about_links))
+                LinkRow(stringResource(R.string.latest_release), "https://github.com/zalexdev/whisper-pair-app", uriHandler)
+                LinkRow(stringResource(R.string.whisperpair_website), "https://whisperpair.eu", uriHandler)
+                LinkRow(stringResource(R.string.cve_entry), "https://www.cve.org/CVERecord?id=CVE-2025-36911", uriHandler)
 
                 Spacer(Modifier.height(12.dp))
 
-                // Support
                 val context = LocalContext.current
                 val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
 
-                SectionHeader("Support Development")
+                SectionHeader(stringResource(R.string.support_dev))
 
-                // Star on GitHub
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(CyanPrimary.copy(alpha = 0.1f)).clickable { uriHandler.openUri("https://github.com/zalexdev/whisper-pair-app") }.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1666,26 +1641,25 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     Icon(Icons.Default.Star, null, tint = CyanPrimary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Star on GitHub", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
-                        Text("Help others discover WhisperPair", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text(stringResource(R.string.star_github), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
+                        Text(stringResource(R.string.star_desc), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                     }
                     Icon(Icons.Default.OpenInNew, null, tint = CyanPrimary, modifier = Modifier.size(16.dp))
                 }
 
                 Spacer(Modifier.height(8.dp))
 
-                // TRC20 Donation
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(WarningOrange.copy(alpha = 0.1f)).clickable {
                         clipboardManager.setPrimaryClip(android.content.ClipData.newPlainText("TRC20 Address", "TXVt15poW3yTBb7zSdaBRuyFsGCpFyg8CU"))
-                        Toast.makeText(context, "Address copied!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
                     }.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = WarningOrange, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("TRC20 (USDT)", style = MaterialTheme.typography.labelSmall, color = WarningOrange)
+                        Text(stringResource(R.string.trc20), style = MaterialTheme.typography.labelSmall, color = WarningOrange)
                         Text("TXVt15poW3yTBb7zSdaBRuyFsGCpFyg8CU", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = TextPrimary)
                     }
                     Icon(Icons.Default.ContentCopy, null, tint = WarningOrange, modifier = Modifier.size(16.dp))
@@ -1693,44 +1667,40 @@ fun AboutDialog(onDismiss: () -> Unit) {
 
                 Spacer(Modifier.height(16.dp))
 
-                // Research Team
-                SectionHeader("Original Research Team")
-                Text("KU Leuven, Belgium", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                SectionHeader(stringResource(R.string.research_team))
+                Text(stringResource(R.string.ku_leuven), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 Spacer(Modifier.height(8.dp))
 
-                Text("COSIC Group:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
+                Text(stringResource(R.string.cosic_group), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
                 LinkRow("Sayon Duttagupta*", "https://www.esat.kuleuven.be/cosic/people/person/?u=u0129899", uriHandler)
                 LinkRow("Nikola Antonijević", "https://www.esat.kuleuven.be/cosic/people/person/?u=u0148369", uriHandler)
                 LinkRow("Bart Preneel", "https://homes.esat.kuleuven.be/~preneel/", uriHandler)
 
                 Spacer(Modifier.height(4.dp))
-                Text("DistriNet Group:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
+                Text(stringResource(R.string.distrinet_group), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = CyanPrimary)
                 LinkRow("Seppe Wyns*", "https://seppe.io", uriHandler)
                 LinkRow("Dave Singelée", "https://sites.google.com/site/davesingelee", uriHandler)
-                Text("* Primary authors", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                Text(stringResource(R.string.primary_authors), style = MaterialTheme.typography.labelSmall, color = TextTertiary)
 
                 Spacer(Modifier.height(12.dp))
 
-                // Resources
-                SectionHeader("Resources")
-                LinkRow("Vulnerable Devices List", "https://whisperpair.eu/vulnerable-devices", uriHandler)
-                LinkRow("Demo Video", "https://www.youtube.com/watch?v=-j45ShJINtc", uriHandler)
-                LinkRow("COSIC Research Group", "https://www.esat.kuleuven.be/cosic", uriHandler)
+                SectionHeader(stringResource(R.string.resources))
+                LinkRow(stringResource(R.string.vuln_devices_list), "https://whisperpair.eu/vulnerable-devices", uriHandler)
+                LinkRow(stringResource(R.string.demo_video), "https://www.youtube.com/watch?v=-j45ShJINtc", uriHandler)
+                LinkRow(stringResource(R.string.cosic_research), "https://www.esat.kuleuven.be/cosic", uriHandler)
 
                 Spacer(Modifier.height(12.dp))
 
-                // Media
-                SectionHeader("Media Coverage")
+                SectionHeader(stringResource(R.string.media_coverage))
                 LinkRow("WIRED", "https://www.wired.com/story/google-fast-pair-bluetooth-audio-accessories-vulnerability-patches/", uriHandler)
                 LinkRow("9to5Google", "https://9to5google.com/2026/01/15/google-fast-pair-devices-exploit-whisperpair/", uriHandler)
 
                 Spacer(Modifier.height(12.dp))
 
-                // Funding
-                Text("Original research funded by Flemish Government Cybersecurity Research Program (VOEWICS02)", style = MaterialTheme.typography.labelSmall, color = TextTertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.funding_note), style = MaterialTheme.typography.labelSmall, color = TextTertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = CyanPrimary) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = CyanPrimary) } },
         containerColor = DarkSurface
     )
 }
